@@ -23,7 +23,7 @@ teacher, then distill it back into the actor:
    rewards.
 2. Compute group-normalized (GRPO) advantages and the outcome gradient:
 
-   $$A_i = \frac{R_i - \bar{R}_{q_i}}{\sigma_{q_i} + \varepsilon}, \qquad g_k = \sum_{(i,t)\in K} w_{it}\, A_i\, s_{it}, \quad s_{it} = \nabla_\theta \log \pi_{\theta_k}(x_{it}\mid c_{it}).$$
+   $$ A_i = \frac{R_i - \bar{R}_{q_i}}{\sigma_{q_i} + \varepsilon}, \qquad g_k = \sum_{(i,t)\in K} w_{it}\, A_i\, s_{it}, \quad s_{it} = \nabla_\theta \log \pi_{\theta_k}(x_{it}\mid c_{it}) $$
 
 3. Construct a **virtual teacher** with one stateless SGD step
    ($\alpha$ is the lookahead rate, independent of the actor's learning rate):
