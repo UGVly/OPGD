@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OPGD — On-Policy Gradient Distillation</title>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true
+      },
+      options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script id="MathJax-script" async src="mathjax.js"></script>
+</head>
+<body>
+
+  <header>
+    <h1>On-Policy Gradient Distillation</h1>
+    <p class="subtitle">Step Ahead, Distill Back: One-Step RL-Guided On-Policy Distillation</p>
+    <p class="authors">
+      Zhou Jiang<sup>1</sup>, Ruotian Peng<sup>2</sup>, Haoquan Zhang<sup>3</sup>, Yandong Wen<sup>2</sup>, Zhen Liu<sup>1,*</sup>
+    </p>
+    <p class="affiliations">
+      <sup>1</sup>The Chinese University of Hong Kong, Shenzhen &nbsp;&nbsp;
+      <sup>2</sup>Westlake University &nbsp;&nbsp;
+      <sup>3</sup>The Chinese University of Hong Kong
+    </p>
+    <p class="corresponding"><sup>*</sup>Corresponding author</p>
+    <div class="links">
+      <!-- TODO: replace with the arXiv link once available -->
+      <a href="#" class="button">Paper</a>
+      <a href="https://github.com/UGVly/OPGD" class="button" target="_blank">Code</a>
+    </div>
+  </header>
+
+  <div class="teaser">
+    <figure>
+      <img src="figures/method_comparison_final.png" alt="Comparison between RLVR, OPD, and OPGD" class="figure-full">
+      <figcaption>
+        Comparison among RLVR (sequence-level outcome advantage), OPD (token-level signal from a separate teacher),
+        and OPGD (token-level signal from a one-step virtual teacher built from the actor itself).
+      </figcaption>
+    </figure>
+  </div>
+
+  <section id="abstract">
+    <h2 style="border-bottom: none; margin-bottom: 0.5em;">
+      One-Step RL-Guided On-Policy Distillation
+    </h2>
+    <p class="abstract-box">
+      On-policy distillation (OPD) offers dense supervision for reasoning models, but its use with reward-trained
+      experts commonly follows a train-then-distill workflow. We show that effective guidance can instead come
+      from a teacher only one reward-gradient step ahead of the student. Our method, <b>On-Policy Gradient
+      Distillation (OPGD)</b>, rebuilds this teacher from the current actor at every iteration, allowing it to
+      inherit accumulated learning while adapting to fresh verified outcomes. The teacher–actor log ratio isolates
+      the preferences induced by this adaptation and supplies signed token advantages for OPD on the same
+      rollouts. A first-order analysis connects these preferences to interactions between token score gradients,
+      explaining how response-level feedback is redistributed within and across responses. Distillation reweights
+      the outcome gradient through the policy's local geometry while preserving nonnegative first-order alignment.
+      On Qwen3-4B, OPGD improves mean Pass@1 over GRPO by 9.2 points across four mathematical benchmarks at a
+      common 100-update budget, and training on coding prompts yields faster learning and higher accuracy across
+      three code-generation benchmarks.
+    </p>
+  </section>
+
+  <section id="method" style="padding: 40px 0;">
+    <div class="band">
+      <h2>How OPGD Works</h2>
+    </div>
+    <div class="content">
+      <p>
+        Each training step reuses a single rollout batch for two jobs — construct the teacher, then distill it back
+        into the actor. Given group-normalized (GRPO) advantages, the outcome gradient is
+      </p>
+
+      <div class="eq">
+        <div class="eq-label">Outcome gradient</div>
+        $$A_i = \frac{R_i - \bar{R}_{q_i}}{\sigma_{q_i} + \varepsilon},
+          \qquad
+          g_k = \sum_{(i,t)\in K} w_{it}\, A_i\, s_{it}, \quad
+          s_{it} = \nabla_\theta \log \pi_{\theta_k}(x_{it}\mid c_{it}).$$
+      </div>
+
+      <p>A <b>virtual teacher</b> is then formed with one stateless SGD step of lookahead rate $\alpha$,
+      independent of the actor's learning rate:</p>
+
+      <div class="eq">
+        <div class="eq-label">One-step teacher</div>
+        $$\theta^E_k = \theta_k + \alpha\, g_k.$$
+      </div>
+
+      <p>The teacher–student log ratio on the sampled tokens becomes a signed token-level OPD advantage, and the
+      actor is optimized with these <i>detached</i> advantages:</p>
+
+      <div class="eq">
+        <div class="eq-label">Token advantage &amp; objective</div>
+        $$d_{it} = \log \pi_{\theta^E_k}(x_{it}\mid c_{it}) - \log \pi_{\theta_k}(x_{it}\mid c_{it}),
+          \qquad
+          L_{\mathrm{OPGD}}(\theta) = -\sum_{i,t} v_{it}\,\mathrm{sg}[d_{it}]\,\log \pi_\theta(x_{it}\mid c_{it}).$$
+      </div>
+
+      <div class="algo-box">
+        <div class="algo-title">Algorithm 1 — On-Policy Gradient Distillation (OPGD)</div>
+        <div>Require: actor $\theta_k$, verifier $R$, prompt batch, group size $G$, lookahead rate $\alpha$, retained fraction $f$</div>
+        <ol>
+          <li>Sample $G$ responses per prompt from $\pi_{\theta_k}$ and evaluate their rewards.</li>
+          <li>Compute group advantages $A_i$ and the outcome gradient $g_k$.</li>
+          <li>Save actor parameters $\theta_k$ and sampled-token log probabilities $\ell_{it}^{0}$.</li>
+          <li>Apply the stateless SGD step $\theta \leftarrow \theta_k + \alpha\, g_k$.</li>
+          <li>Measure $d_{it} \leftarrow \mathrm{sg}\!\big[\log \pi_\theta(x_{it}\mid c_{it}) - \ell_{it}^{0}\big]$.</li>
+          <li>Restore $\theta \leftarrow \theta_k$ and clear temporary gradients.</li>
+          <li>Retain the top fraction $f$ of $|d_{it}|$ within each response ($f=1$ keeps all tokens).</li>
+          <li>Update the actor once and advance its optimizer and scheduler.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section id="why" style="padding: 40px 0;">
+    <div class="band">
+      <h2>Why One Step Is Enough</h2>
+    </div>
+    <div class="content">
+      <p>
+        Linearizing the teacher gives an <b>NTK view of contextual credit</b>: a token's coefficient sums the batch
+        outcome signal over its score similarities with every other sampled token.
+      </p>
+
+      <div class="eq">
+        <div class="eq-label">Contextual credit</div>
+        $$d_{it} \approx \alpha\, s_{it}^\top g_k = \alpha \sum_{j,u} w_{ju} A_j\, \underbrace{s_{it}^\top s_{ju}}_{K(it,ju)}.$$
+      </div>
+
+      <p>
+        The diagonal contribution carries the sign of the token's own response advantage, but interactions with
+        other tokens can reinforce or <i>reverse</i> it. This is why the same token can receive opposite advantages
+        in different contexts, and why responses with zero group advantage still receive a signal from the rest of
+        the batch:
+      </p>
+
+      <figure>
+        <img src="figures/target_fragment.png" alt="Contextual credit example" class="figure-full">
+        <figcaption>In one zero-advantage response, the two occurrences of "symmetric" receive opposite advantages.</figcaption>
+      </figure>
+
+      <p>
+        The induced update reweights the outcome gradient through the actor's local geometry while preserving
+        nonnegative first-order alignment:
+      </p>
+
+      <div class="eq">
+        <div class="eq-label">Geometry &amp; alignment</div>
+        $$h_k = -\nabla_\theta L_{\mathrm{OPGD}}(\theta_k) \approx \alpha F_k g_k,
+          \qquad
+          F_k = \sum_{i,t} v_{it}\, s_{it} s_{it}^\top,
+          \qquad
+          g_k^\top h_k \approx \tfrac{1}{\alpha}\sum_{i,t} v_{it} d_{it}^2 \ge 0.$$
+      </div>
+
+      <p>
+        Because every position contributes proportionally to $v_{it} d_{it}^2$, retaining the largest $|d_{it}|$ per
+        response maximizes the alignment — motivating the top-10% selection variant. The checked-in configuration
+        keeps all tokens ($f=1$).
+      </p>
+    </div>
+  </section>
+
+  <section id="results" style="padding: 40px 0;">
+    <div class="band">
+      <h2>Faster Learning across Math and Code</h2>
+    </div>
+    <div class="content">
+      <p>
+        <b>Qwen3-4B.</b> Within the same 100-update budget, full-target OPGD surpasses GRPO on all four mathematical
+        benchmarks, with mean scores exceeding both the 200-update run and the published 500-update GRPO reference.
+        Mean Pass@1 (32 completions/problem):
+      </p>
+
+      <div class="table-wrap">
+        <table class="results">
+          <thead>
+            <tr>
+              <th>Method</th><th>Budget</th><th>AIME'24</th><th>AIME'25</th><th>HMMT-Feb'25</th><th>HMMT-Nov'25</th><th>Mean</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Base</td><td>—</td><td>0.223</td><td>0.207</td><td>0.109</td><td>0.088</td><td>0.157</td></tr>
+            <tr><td>GRPO</td><td>100</td><td>0.492</td><td>0.428</td><td>0.269</td><td>0.314</td><td>0.376</td></tr>
+            <tr><td>GRPO (entropy 20%)</td><td>100</td><td>0.546</td><td>0.476</td><td>0.283</td><td>0.339</td><td>0.411</td></tr>
+            <tr><td>DAPO</td><td>100</td><td>0.553</td><td>0.524</td><td>0.284</td><td>0.355</td><td>0.429</td></tr>
+            <tr><td>GRPO</td><td>200</td><td>0.584</td><td>0.512</td><td>0.297</td><td>0.347</td><td>0.435</td></tr>
+            <tr><td>GRPO (external ref.)</td><td>500</td><td>0.582</td><td>0.560</td><td>0.322</td><td>0.383</td><td>0.462</td></tr>
+            <tr class="highlight"><td>OPGD (full)</td><td>100</td><td>0.606</td><td>0.552</td><td>0.330</td><td>0.382</td><td class="best">0.468</td></tr>
+            <tr class="highlight"><td>OPGD (top 10%)</td><td>100</td><td class="best">0.667</td><td>0.545</td><td class="best">0.354</td><td class="best">0.391</td><td class="best">0.489</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-note">Full-target OPGD beats GRPO by 9.2 points at the same budget; top-10% OPGD improves the mean further.</div>
+
+      <figure style="margin-top: 28px;">
+        <img src="figures/aime_avg_grpo_opgd.png" alt="AIME learning curves" class="figure-full" style="max-width: 400px;">
+        <figcaption>AIME average accuracy: OPGD plateaus within the first few dozen updates while GRPO improves gradually.</figcaption>
+      </figure>
+
+      <p style="margin-top: 32px;">
+        <b>Code generation.</b> Separate training on coding prompts (Qwen3-4B) reaches GRPO's update-100 accuracy
+        within 30–40 updates and stays ahead at every shared evaluation (Pass@1 gains over GRPO, percentage points):
+      </p>
+
+      <div class="table-wrap">
+        <table class="results">
+          <thead>
+            <tr><th>Benchmark</th><th>Mean gain</th><th>Gain at update 100</th><th>First matching update</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>HumanEval+</td><td>+3.6</td><td>+3.3</td><td>40</td></tr>
+            <tr><td>MBPP+</td><td>+2.3</td><td>+1.4</td><td>30</td></tr>
+            <tr><td>LiveCodeBench v6</td><td>+3.1</td><td>+3.7</td><td>40</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+            <p style="margin-top: 32px;">
+        <b>Qwen3-8B cross-domain transfer.</b> After the same 100-update budget, OPGD improves in-domain mathematical
+        reasoning <i>and</i> transfers to out-of-domain code generation (percentages):
+      </p>
+
+      <p style="margin: 18px 0 8px; font-weight: 600;">Pass@1</p>
+      <div class="table-wrap">
+        <table class="results">
+          <thead><tr><th>Method</th><th>AIME'24</th><th>AIME'25</th><th>HMMT-Feb</th><th>HMMT-Nov</th><th>Math avg</th><th>HumanEval</th><th>HE+</th><th>MBPP</th><th>MBPP+</th><th>LCB v6</th><th>Code avg</th></tr></thead>
+          <tbody>
+            <tr><td>Base</td><td>27.2</td><td>21.7</td><td>10.1</td><td>9.2</td><td>17.0</td><td>88.0</td><td>81.3</td><td>80.8</td><td>69.2</td><td>17.0</td><td>67.2</td></tr>
+            <tr><td>GRPO</td><td>54.0</td><td>41.0</td><td>26.0</td><td>35.6</td><td>39.2</td><td>85.1</td><td>80.5</td><td>81.5</td><td>70.8</td><td>17.4</td><td>67.1</td></tr>
+            <tr class="highlight"><td>OPGD</td><td class="best">67.2</td><td class="best">51.2</td><td class="best">31.9</td><td class="best">44.1</td><td class="best">48.6</td><td class="best">88.7</td><td class="best">82.2</td><td class="best">84.8</td><td class="best">73.3</td><td class="best">18.1</td><td class="best">69.4</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p style="margin: 18px 0 8px; font-weight: 600;">Pass@4</p>
+      <div class="table-wrap">
+        <table class="results">
+          <thead><tr><th>Method</th><th>AIME'24</th><th>AIME'25</th><th>HMMT-Feb</th><th>HMMT-Nov</th><th>Math avg</th><th>HumanEval</th><th>HE+</th><th>MBPP</th><th>MBPP+</th><th>LCB v6</th><th>Code avg</th></tr></thead>
+          <tbody>
+            <tr><td>Base</td><td>43.5</td><td>31.6</td><td>16.9</td><td>21.7</td><td>28.4</td><td>95.7</td><td>89.6</td><td>89.4</td><td>77.8</td><td>22.9</td><td>75.1</td></tr>
+            <tr><td>GRPO</td><td>74.8</td><td>58.8</td><td>40.2</td><td>50.9</td><td>56.2</td><td>90.2</td><td>86.6</td><td>89.2</td><td>77.8</td><td>22.9</td><td>73.3</td></tr>
+            <tr class="highlight"><td>OPGD</td><td class="best">79.8</td><td class="best">69.4</td><td class="best">48.8</td><td class="best">58.6</td><td class="best">64.1</td><td class="best">94.5</td><td class="best">90.9</td><td class="best">90.0</td><td class="best">79.4</td><td class="best">22.9</td><td class="best">75.5</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+
+<p style="margin-top: 32px;">
+        <b>Computational cost.</b> An OPGD update costs ~1.5&times; a GRPO update; the overhead is concentrated in the
+        virtual backward pass and teacher scoring, and does not shrink proportionally with the selected fraction.
+      </p>
+    </div>
+  </section>
+
+  <section id="ablation" style="padding: 40px 0;">
+    <div class="band">
+      <h2>How Much of the Teacher Do We Need?</h2>
+    </div>
+    <div class="content">
+      <p>
+        The globally largest 10% of targets carry 76.9% of absolute mass. Distilling the top 10% preserves rapid
+        learning and yields higher scores than the complementary bottom 90% across all sampling budgets (four-benchmark
+        mean, %):
+      </p>
+
+      <div class="table-wrap">
+        <table class="results">
+          <thead>
+            <tr><th>Retained targets</th><th>Pass@1</th><th>Pass@4</th><th>Pass@8</th></tr>
+          </thead>
+          <tbody>
+            <tr class="highlight"><td>Top 10%</td><td class="best">48.91</td><td class="best">63.07</td><td class="best">67.19</td></tr>
+            <tr><td>Bottom 90%</td><td>45.60</td><td>59.65</td><td>63.93</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-note">Both teachers are constructed from the complete batch before selection; only the distilled targets differ.</div>
+    </div>
+  </section>
+
+  <section id="analysis" style="padding: 40px 0;">
+    <div class="band">
+      <h2>Gradient Structure</h2>
+    </div>
+    <div class="content">
+      <p>
+        At the same actor and rollout batch, matching the teacher's preferences concentrates singular-value
+        energy in the leading gradient directions and lowers spectral entropy across layer groups — most
+        strongly in later layers and the embedding.
+      </p>
+
+      <figure>
+        <img src="figures/grad_compare_step1_gradient_structure.png" alt="Gradient structure" class="figure-full">
+        <figcaption>Gradient structure under full-target distillation, from the same actor and batch. Left: leading-16 energy shares for 253 gradient matrices. Right: layer-group spectral-entropy proxy.</figcaption>
+      </figure>
+
+      <figure>
+        <img src="figures/grad_compare_step1_spectral_entropy.png" alt="Spectral entropy" class="figure-full">
+        <figcaption>Layer-group spectral-entropy proxy: distillation reduces effective rank across layer groups.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="citation" style="padding: 40px 0;">
+    <div class="band">
+      <h2>Citation</h2>
+    </div>
+    <pre>@misc{jiang2026opgd,
+  title={Step Ahead, Distill Back: One-Step RL-Guided On-Policy Distillation},
+  author={Zhou Jiang and Ruotian Peng and Haoquan Zhang and Yandong Wen and Zhen Liu},
+  year={2026},
+  eprint={XXXX.XXXXX},  % TODO: replace with the arXiv id
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  url={https://github.com/UGVly/OPGD}
+}</pre>
+  </section>
+
+  <footer>
+    <p>This website is adapted from Nerfies and OrthoMerge, licensed under a
+    Creative Commons Attribution-ShareAlike 4.0 International License.</p>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,242 @@
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background-color: #ffffff;
+  color: #222;
+  margin: 0;
+  padding: 0;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+header {
+  text-align: center;
+  padding: 60px 20px 40px 20px;
+}
+
+h1 {
+  font-size: 2.4em;
+  margin-bottom: 10px;
+}
+
+.subtitle {
+  font-size: 1.1em;
+  color: #444;
+  margin-top: 0.2em;
+}
+
+.authors, .affiliations {
+  font-size: 1em;
+  color: #555;
+  margin: 6px 0;
+}
+
+.authors sup { font-size: 0.7em; }
+
+.corresponding {
+  font-size: 0.85em;
+  color: #888;
+  margin-top: 4px;
+}
+
+.links { margin-top: 15px; }
+
+.button {
+  background: #222;
+  color: #fff;
+  padding: 8px 14px;
+  text-decoration: none;
+  border-radius: 5px;
+  margin: 0 6px;
+  display: inline-block;
+  transition: background 0.3s ease;
+}
+
+.button:hover { background: #444; color: #fff; }
+
+section {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+h2 {
+  border-bottom: 2px solid #eee;
+  padding-bottom: 6px;
+  margin-bottom: 20px;
+}
+
+/* full-width grey band for section titles */
+.band {
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  width: 100vw;
+  background-color: #f5f5f5;
+  padding: 0.8em 0;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.band h2 {
+  border-bottom: none;
+  margin: 0;
+  font-size: 2em;
+  line-height: 1.25;
+}
+
+/* centered content column; body text is justified */
+.content {
+  max-width: 800px;
+  margin: 1.5em auto 0 auto;
+  text-align: justify;
+}
+
+.content p { margin: 0 0 1em 0; }
+
+/* teaser */
+.teaser { max-width: 800px; margin: 0 auto; text-align: center; }
+figure { margin: 0 0 1.5em 0; }
+
+figcaption {
+  margin-top: 0.6em;
+  font-size: 0.95em;
+  color: #555;
+  text-align: center;
+}
+
+.figure-full {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #e4e4e4;
+  border-radius: 6px;
+  background: #fff;
+}
+
+/* abstract */
+.abstract-box {
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: justify;
+  font-size: 1.02em;
+}
+
+/* contributions cards */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  max-width: 800px;
+  margin: 1.5em auto 0 auto;
+  text-align: left;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e4e4e4;
+  border-radius: 6px;
+  padding: 20px;
+}
+
+.card h3 { font-size: 1.02em; margin: 0 0 8px; }
+.card p { margin: 0; font-size: 0.93em; color: #555; text-align: justify; }
+
+/* equations: centered, label above */
+.eq {
+  margin: 26px auto;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.eq .eq-label {
+  font-size: 0.78em;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+/* algorithm box */
+.algo-box {
+  background: #f5f5f5;
+  border: 1px solid #e4e4e4;
+  border-radius: 6px;
+  padding: 20px 24px;
+  margin: 20px auto;
+  font-size: 0.94em;
+  text-align: left;
+}
+
+.algo-box .algo-title { font-weight: 700; margin-bottom: 10px; }
+.algo-box ol { margin: 0; padding-left: 22px; }
+
+/* callout */
+.callout {
+  background: #ffffff;
+  border: 1px solid #e4e4e4;
+  border-left: 6px solid #2b6cb0;
+  border-radius: 6px;
+  padding: 16px 20px;
+  margin: 20px auto;
+  font-size: 0.96em;
+  text-align: justify;
+}
+
+/* tables */
+.table-wrap {
+  overflow-x: auto;
+  margin: 1.5em auto;
+}
+
+table.results {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: center;
+  margin: 0 auto;
+}
+
+table.results th, table.results td {
+  border: 1px solid #ddd;
+  padding: 6px 8px;
+}
+
+table.results thead th { background-color: #f5f5f5; }
+table.results td:first-child, table.results th:first-child { text-align: left; }
+
+table.results tr.highlight td { background-color: #f0f0f0; }
+table.results tr.highlight td:first-child { font-weight: 700; }
+table.results .best { font-weight: 700; }
+
+.table-note {
+  font-size: 0.82em;
+  color: #555;
+  text-align: center;
+  margin-top: 8px;
+}
+
+/* bibtex */
+pre {
+  background-color: #f5f5f5;
+  padding: 14px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.9em;
+  line-height: 1.6;
+  text-align: left;
+  max-width: 800px;
+  margin: 1.5em auto 0 auto;
+}
+
+footer {
+  text-align: center;
+  font-size: 0.9em;
+  color: #777;
+  padding: 20px;
+  border-top: 1px solid #eee;
+}
