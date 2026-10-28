@@ -9,7 +9,10 @@ models, but it is usually supplied by a *fully reward-trained* expert in a
 train-then-distill workflow. OPGD shows that a teacher only **one reward-gradient
 step ahead** of the student is already enough: every iteration rebuilds the
 teacher from the current actor, so it inherits accumulated learning while one
-SGD step supplies fresh guidance from the latest verified outcomes.
+SGD step supplies fresh guidance from the latest verified outcomes. This
+repository is built on [G-OPD](https://github.com/RUCBM/G-OPD) and
+[veRL](https://github.com/volcengine/verl); we are grateful to their authors
+for releasing these codebases.
 
 ## Method
 
@@ -20,11 +23,7 @@ teacher, then distill it back into the actor:
    rewards.
 2. Compute group-normalized (GRPO) advantages and the outcome gradient:
 
-   $$A_i = \frac{R_i - \bar{R}_{q_i}}{\sigma_{q_i} + \varepsilon},
-   \qquad
-   g_k = \sum_{(i,t)\in K} w_{it}\, A_i\, s_{it},
-   \quad
-   s_{it} = \nabla_\theta \log \pi_{\theta_k}(x_{it}\mid c_{it}).$$
+   $$A_i = \frac{R_i - \bar{R}_{q_i}}{\sigma_{q_i} + \varepsilon}, \qquad g_k = \sum_{(i,t)\in K} w_{it}\, A_i\, s_{it}, \quad s_{it} = \nabla_\theta \log \pi_{\theta_k}(x_{it}\mid c_{it}).$$
 
 3. Construct a **virtual teacher** with one stateless SGD step
    ($\alpha$ is the lookahead rate, independent of the actor's learning rate):
@@ -46,19 +45,14 @@ Linearizing step 4 gives the NTK view of **contextual credit** — a token's
 coefficient sums the batch outcome signal over its score similarities with every
 other sampled token:
 
-$$d_{it} \approx \alpha\, s_{it}^\top g_k
-= \alpha \sum_{j,u} w_{ju} A_j\, \underbrace{s_{it}^\top s_{ju}}_{K(it,ju)}.$$
+$$d_{it} \approx \alpha\, s_{it}^\top g_k = \alpha \sum_{j,u} w_{ju} A_j\, \underbrace{s_{it}^\top s_{ju}}_{K(it,ju)}.$$
 
 This is why the same token can receive opposite advantages in different contexts,
 and why responses with zero group advantage still get a signal from the rest of
 the batch. The induced update reweights the outcome gradient through the actor's
 local geometry while preserving nonnegative first-order alignment:
 
-$$h_k = -\nabla_\theta L_{\mathrm{OPGD}}(\theta_k) \approx \alpha F_k g_k,
-\qquad
-F_k = \sum_{i,t} v_{it}\, s_{it} s_{it}^\top,
-\qquad
-g_k^\top h_k \approx \tfrac{1}{\alpha}\sum_{i,t} v_{it} d_{it}^2 \ge 0.$$
+$$h_k = -\nabla_\theta L_{\mathrm{OPGD}}(\theta_k) \approx \alpha F_k g_k, \qquad F_k = \sum_{i,t} v_{it}\, s_{it} s_{it}^\top, \qquad g_k^\top h_k \approx \tfrac{1}{\alpha}\, \sum_{i,t} v_{it} d_{it}^2 \ge 0.$$
 
 Retaining the largest $|d_{it}|$ within each response maximizes this alignment;
 the checked-in config keeps all tokens (`f = 1`) and the top-10% variant sets
@@ -214,12 +208,3 @@ diagnostic batch snapshots without enabling an entropy trick, for example with
   AIME 2024/2025 and HMMT 2025.
 - Code: `code_eval/scripts/` runs HumanEval+/MBPP+ (`run_evalplus.sh`) and
   LiveCodeBench generation (`run_lcb_gen.sh`).
-
-## Tests
-
-CPU contracts for the profiles and safety logic:
-
-```bash
-cd verl
-python -m pytest recipe/opgd/tests/test_opgd.py
-```
