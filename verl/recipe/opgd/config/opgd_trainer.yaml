@@ -1,0 +1,87 @@
+hydra:
+  searchpath:
+    - file://verl/trainer/config
+
+defaults:
+  - ppo_trainer
+  - _self_
+
+data:
+  gen_batch_size: ${data.train_batch_size}
+
+reward_model:
+  overlong_buffer:
+    enable: false
+    len: 0
+    penalty_factor: 0.0
+    log: false
+
+algorithm:
+  filter_groups:
+    _target_: verl.trainer.config.FilterGroupsConfig
+    enable: false
+    metric: null
+    max_num_gen_batches: 0
+
+  adv_estimator: grpo
+  norm_adv_by_std_in_grpo: true
+  use_kl_in_reward: false
+
+  opgd:
+    enable: true
+    expert_count: 1
+
+    # Trick 1: normalized SGD. Set virtual_update=sgd for raw SGD.
+    virtual_update: sgd
+    virtual_step_l2: 0.01755
+    virtual_sgd_learning_rate: 0.17
+
+    # Trick 2: one optional teacher-distance rescale pass.
+    adaptive_virtual_scale: false
+    target_logratio_abs_mean: 0.03
+    target_logratio_low: 0.015
+    target_logratio_high: 0.06
+    max_logratio_abs_mean: 0.10
+    max_rescale_passes: 0
+    min_runtime_scale_factor: 0.25
+    max_runtime_scale_factor: 4.0
+
+    # Tricks 3 and 4 are opt-in; the base profile is raw SGD without prompt
+    # centering or OPD/RL length denormalization.
+    prompt_centering: false
+    use_grpo_advantage: false
+    grpo_advantage_scale: 1.0
+    length_denormalization_opd: false
+    length_denormalization_rl: false
+    # Keep only the top absolute delta tokens per response; 0 disables.
+    delta_top_fraction: 0.0
+    # Keep the highest-entropy tokens per response; 0 disables.
+    entropy_top_fraction: 0.0
+    # Keep the smallest absolute final-advantage tokens per response; 0 disables.
+    advantage_bottom_fraction: 0.0
+    # Keep the largest absolute final-advantage tokens per response; 0 disables.
+    # This is the |advantage| top-fraction experiment switch.
+    advantage_top_fraction: 0.0
+    length_denormalization_max_tokens: ${data.max_response_length}
+
+    # Logging-only support threshold for L0 statistics.
+    l0_zero_tolerance: 1.0e-6
+
+    # Mask responses whose prompt group has identical (zero-variance) GRPO
+    # rewards (all-correct or all-incorrect groups). Their OPD signal is kept
+    # out of the real update, so no gradient flows through those responses.
+    mask_uniform_reward_groups: false
+    uniform_reward_tolerance: 1.0e-6
+
+    # Scale-OPGD: equalize each response's advantage magnitude before masking.
+    scale_opgd:
+      enable: false
+      statistic: mean_abs  # mean_abs, rms, or l2
+      target: batch_mean   # batch_mean or unit
+      eps: 1.0e-6
+
+    # Trick 5 is enabled by setting expert_count > 1.
+    verify_restore: true
+
+trainer:
+  project_name: OPGD

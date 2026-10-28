@@ -1,0 +1,38 @@
+# Entropy-weighted GRPO.
+#
+# Plain GRPO (no critic, no reference model) whose per-token advantage is multiplied by
+# w_t = minmax(H_t) over the response, so the most uncertain token gets weight 1 and the
+# least uncertain one gets weight 0. See ../README.md.
+
+hydra:
+  searchpath:
+    - file://verl/trainer/config
+
+defaults:
+  - ppo_trainer
+  - _self_
+
+algorithm:
+  adv_estimator: grpo
+  norm_adv_by_std_in_grpo: true
+  use_kl_in_reward: false
+
+actor_rollout_ref:
+  actor:
+    entropy_coeff: 0
+    use_kl_loss: false
+    policy_loss:
+      loss_mode: vanilla
+
+      # Min-max normalize entropy into [0, 1] and multiply the token advantage by it, so the
+      # tokens the policy is least sure about carry the most weight.
+      entropy_token_weight_mode: pos_entropy_minmax
+
+      # Normalize inside each response, or over the whole batch.
+      entropy_token_weight_scope: response
+
+      # Rescale the weights to mean 1 over valid tokens. Raw min-max weights are heavily
+      # skewed: within a response most tokens sit near the low-entropy end, so the raw
+      # pos_entropy_minmax weights average about 0.11 and the update would shrink to roughly a
+      # ninth of GRPO at the same learning rate. Rescaling keeps lr=1e-6 meaningful.
+      entropy_token_weight_renormalize_mean: true
